@@ -175,6 +175,75 @@ def demo_multibit_watermarking(image_path):
     print("\n✅ Multi-bit watermarking demo completed!\n")
 
 
+def demo_extract_from_saved_file():
+    """Demonstrate extracting watermark from a saved file."""
+    print("=" * 70)
+    print("DEMO 3: Extract Watermark from Saved File")
+    print("=" * 70)
+    
+    # Load previously watermarked image from disk
+    watermarked_path = '../output/demo_multibit_watermarked.png'
+    
+    if not os.path.exists(watermarked_path):
+        print("⚠️  No watermarked image found. Please run DEMO 2 first.")
+        print("✅ Demo 3 skipped.\n")
+        return
+    
+    print(f"Loading watermarked image from disk: {watermarked_path}")
+    watermarked_img = load_image(watermarked_path)
+    print(f"✓ Loaded image: {watermarked_img.size}, mode: {watermarked_img.mode}")
+    
+    # Use same carrier and parameters as embedding
+    carrier = np.array([42])
+    print(f"✓ Using carrier seed: {carrier[0]}")
+    
+    # Extract parameters (must match embedding parameters)
+    params_extract = {
+        'num_bits': 30,  # Same as original message
+        'redundancy': 3,
+        'channels': [0, 1, 2]
+    }
+    print(f"✓ Extraction parameters: {params_extract['num_bits']} bits, redundancy={params_extract['redundancy']}")
+    
+    print("\n--- Extracting watermark ---")
+    decoded_message = extract_multibit(watermarked_img, carrier, params_extract)
+    print(f"✓ Watermark extracted successfully!")
+    print(f"✓ Extracted message (first 10 bits): {decoded_message[:10]}")
+    print(f"✓ Full binary string: {''.join(map(str, decoded_message.astype(int)))}")
+    
+    # Verify against original message
+    print("\n--- Verification ---")
+    original_message = np.array([
+        1, 0, 1, 1, 0, 0, 1, 0, 1, 1,  # First 10 bits
+        0, 1, 0, 0, 1, 1, 1, 0, 0, 1,  # Next 10 bits
+        0, 1, 1, 0, 1, 0, 0, 1, 1, 0   # Last 10 bits
+    ], dtype=np.uint8)
+    
+    accuracy = np.sum(decoded_message == original_message) / len(original_message)
+    bit_errors = np.sum(decoded_message != original_message)
+    print(f"✓ Verification accuracy: {accuracy * 100:.2f}%")
+    print(f"✓ Bit errors: {bit_errors} / {len(original_message)}")
+    
+    if bit_errors == 0:
+        print("✅ Perfect match with original message!")
+    else:
+        print("⚠️  Some bits differ from original (may be due to JPEG compression if saved as JPG)")
+    
+    # Decode as User IDs (example use case)
+    print("\n--- Decoding as User Transaction (NFT Use Case) ---")
+    owner_bits = decoded_message[:15]
+    buyer_bits = decoded_message[15:30]
+    
+    owner_id = int(''.join(map(str, owner_bits.astype(int))), 2)
+    buyer_id = int(''.join(map(str, buyer_bits.astype(int))), 2)
+    
+    print(f"✓ Owner ID: {owner_id:5d} (binary: {''.join(map(str, owner_bits.astype(int)))})")
+    print(f"✓ Buyer ID: {buyer_id:5d} (binary: {''.join(map(str, buyer_bits.astype(int)))})")
+    print(f"📝 Transaction: User {owner_id} → User {buyer_id}")
+    
+    print("\n✅ Extraction from saved file completed!\n")
+
+
 def create_sample_image_if_needed():
     """Create a sample image if no image is provided."""
     print("No image path provided. Creating a sample image...")
@@ -228,12 +297,17 @@ def main():
         # Demo 2: Multi-bit watermarking
         demo_multibit_watermarking(image_path)
         
+        # Demo 3: Extract from saved file
+        demo_extract_from_saved_file()
+        
         print("=" * 70)
         print("All demos completed successfully!".center(70))
         print("=" * 70)
         print(f"\nOutput images saved to: ../output/")
         print("  - demo_0bit_watermarked.png")
         print("  - demo_multibit_watermarked.png")
+        print(f"\n💡 Tip: You can now extract watermark from any saved image using:")
+        print("   demo_extract_from_saved_file() function")
         
     except FileNotFoundError as e:
         print(f"\n❌ Error: {e}")
