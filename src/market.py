@@ -75,10 +75,16 @@ class Market:
         asset_market_manager = AssetMarket(
             LOCAL_ENDPOINT, self.market_address, self.manager_address)
 
-        asset_market_manager.update_hash(
+        update_hash_receipt = asset_market_manager.update_hash(
             agreement_address, token_id, img_hash)
         step4_time = time.time() - start_time
-        timing_log.append(f"4. Update hash on smart contract: {step4_time:.3f}s")
+        update_hash_gas = update_hash_receipt.gasUsed
+        # Get gas price and calculate fee
+        update_hash_tx = asset_market_manager.w3.eth.get_transaction(update_hash_receipt.transactionHash)
+        update_hash_gas_price = update_hash_tx.get('gasPrice') or update_hash_receipt.get('effectiveGasPrice', 0)
+        update_hash_fee_wei = update_hash_gas * update_hash_gas_price
+        update_hash_fee_eth = Web3.fromWei(update_hash_fee_wei, 'ether')
+        timing_log.append(f"4. Update hash on smart contract: {step4_time:.3f}s (Gas: {update_hash_gas:,} gas, Fee: {update_hash_fee_eth:.9f} ETH)")
         
         # Step 5: Get buyer wallet and transfer asset
         start_time = time.time()
@@ -87,13 +93,25 @@ class Market:
 
         asset_market = AssetMarket(
             LOCAL_ENDPOINT, self.market_address, buyer_wallet_address)
-        asset_market.purchase(
+        purchase_receipt = asset_market.purchase(
             agreement_address, token_id, asset_price)
         step5_time = time.time() - start_time
-        timing_log.append(f"5. Transfer asset to buyer: {step5_time:.3f}s")
+        purchase_gas = purchase_receipt.gasUsed
+        # Get gas price and calculate fee
+        purchase_tx = asset_market.w3.eth.get_transaction(purchase_receipt.transactionHash)
+        purchase_gas_price = purchase_tx.get('gasPrice') or purchase_receipt.get('effectiveGasPrice', 0)
+        purchase_fee_wei = purchase_gas * purchase_gas_price
+        purchase_fee_eth = Web3.fromWei(purchase_fee_wei, 'ether')
+        timing_log.append(f"5. Transfer asset to buyer: {step5_time:.3f}s (Gas: {purchase_gas:,} gas, Fee: {purchase_fee_eth:.9f} ETH)")
+        
+        # Calculate total gas and total fee
+        total_gas = update_hash_gas + purchase_gas
+        total_fee_eth = update_hash_fee_eth + purchase_fee_eth
 
         total_time = time.time() - overall_start
         timing_log.append(f"**Total time: {total_time:.3f}s**")
+        timing_log.append(f"**Total gas used: {total_gas:,} gas**")
+        timing_log.append(f"**Total gas fee: {total_fee_eth:.9f} ETH**")
 
         # Display success message with total time prominently
         st.success(f"✅ Purchase completed successfully in {total_time:.3f}s")
@@ -104,6 +122,8 @@ class Market:
         st.write(f"- Image Hash: {img_hash_hex}")
         st.write(f"- Price: {asset_price} ETH, Token ID: {token_id}")
         st.write(f"- Watermarking method: {watermark_method.upper()}")
+        st.write(f"- **Total Gas Used: {total_gas:,} gas**")
+        st.write(f"- **Total Gas Fee: {total_fee_eth:.9f} ETH**")
 
         # Detailed timing log in expander
         with st.expander("📊 Detailed Runtime Log"):
