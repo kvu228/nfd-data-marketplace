@@ -5,6 +5,7 @@ from PIL import Image
 from constants import LOCAL_ENDPOINT
 from web3 import Web3
 from db import get_demo_db
+from user_utils import get_user_display_options, get_user_from_display
 
 
 class Dashboard:
@@ -17,8 +18,15 @@ class Dashboard:
         st.write("View Purchased Assets")
 
         con = get_demo_db()
-        res = con.execute("SELECT uname FROM users")
-        user = st.selectbox("User", map(lambda r: r[0], res.fetchall()))
+        display_options, user_data_dict = get_user_display_options(include_balance=True)
+        
+        if not display_options:
+            st.warning("No users registered yet.")
+            con.close()
+            return
+        
+        selected_display = st.selectbox("User", options=display_options)
+        user = get_user_from_display(selected_display, user_data_dict)
 
         res = con.execute(
             "SELECT users.wallet FROM users WHERE users.uname = ?", [user])

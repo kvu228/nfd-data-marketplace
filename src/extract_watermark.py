@@ -5,6 +5,7 @@ from Crypto.Hash import SHA256
 from contract import AssetMarket
 from constants import LOCAL_ENDPOINT
 from db import get_demo_db
+from user_utils import get_user_display_options, get_user_from_display
 import time
 
 
@@ -133,15 +134,23 @@ class ExtractWatermark:
         """)
         con = get_demo_db()
         with st.form("recovery"):
+            display_options, user_data_dict = get_user_display_options(include_balance=True)
+            
+            if not display_options:
+                st.warning("No users registered yet.")
+                con.close()
+                return
 
-            res = con.execute("SELECT uname FROM users")
-
-            users = list(map(lambda r: r[0], res.fetchall()))
-
-            original_owner = st.selectbox("Original Owner", options=users)
+            original_owner_display = st.selectbox("Original Owner", options=display_options)
+            original_owner = get_user_from_display(original_owner_display, user_data_dict)
+            
             asset = st.file_uploader("Upload Original Asset")
-            owner = st.selectbox("Seller", options=users)
-            buyer = st.selectbox("Buyer", options=users)
+            
+            owner_display = st.selectbox("Seller", options=display_options)
+            owner = get_user_from_display(owner_display, user_data_dict)
+            
+            buyer_display = st.selectbox("Buyer", options=display_options)
+            buyer = get_user_from_display(buyer_display, user_data_dict)
 
             upload = st.form_submit_button("Upload")
 
@@ -181,7 +190,7 @@ class ExtractWatermark:
             except Exception as e:
                 record_time = time.time() - start_time
                 timing_log.append(f"2. Find sale record (failed): {record_time:.3f}s")
-                st.write("Sale Record does not exist")
+                st.write(f"Sale Record does not exist: {str(e)}")
 
             with st.expander("Log"):
                 for log_entry in timing_log:
