@@ -1,10 +1,8 @@
-from upload import Upload
 import streamlit as st
 from PIL import Image
 from contract import AssetMarket, AssetAgreement, get_web3_provider
 from constants import LOCAL_ENDPOINT
-# from ssl_watermarking.main_multibit import Watermark
-from lsb_watermarking.main_multibit import Watermark
+from extract_watermark import WatermarkWrapper
 from tempfile import NamedTemporaryFile
 from Crypto.Hash import SHA256
 from web3 import Web3
@@ -54,7 +52,9 @@ class Market:
         wm_file_name = wm_image.name
         wm_image.close()
 
-        wm = Watermark()
+        # Get watermark method from session state, default to "lsb"
+        watermark_method = st.session_state.get("watermark_method", "lsb")
+        wm = WatermarkWrapper(watermark_method)
 
         wm.set_watermark(seller_id, buyer_id)
         wm.watermark_image(wm_file_name)

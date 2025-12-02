@@ -1,19 +1,68 @@
 import streamlit as st
 from tempfile import NamedTemporaryFile
 from os.path import basename
-# from ssl_watermarking.main_multibit import Watermark
-from lsb_watermarking.main_multibit import Watermark
 from Crypto.Hash import SHA256
 from contract import AssetMarket
 from constants import LOCAL_ENDPOINT
 from db import get_demo_db
 
 
+class WatermarkWrapper:
+    """
+    Wrapper class to switch between SSL and LSB watermarking implementations.
+    """
+    
+    def __init__(self, method: str = "lsb"):
+        """
+        Initialize watermark wrapper with specified method.
+        
+        Args:
+            method: Watermarking method to use. Options: "lsb" or "ssl". Default: "lsb"
+        """
+        self.method = method.lower()
+        
+        if self.method == "ssl":
+            from ssl_watermarking.main_multibit import Watermark
+        elif self.method == "lsb":
+            from lsb_watermarking.main_multibit import Watermark
+        else:
+            raise ValueError(f"Unknown watermarking method: {method}. Must be 'lsb' or 'ssl'")
+        
+        self._watermark = Watermark()
+    
+    def extract_watermark(self, img_filepath: str):
+        """Extract watermark from image."""
+        return self._watermark.extract_watermark(img_filepath)
+    
+    def set_watermark(self, owner_id: int, buyer_id: int):
+        """Set watermark with owner and buyer IDs."""
+        return self._watermark.set_watermark(owner_id, buyer_id)
+    
+    def watermark_image(self, img_filepath: str):
+        """Watermark an image."""
+        return self._watermark.watermark_image(img_filepath)
+    
+    def watermark(self):
+        """Watermark batch images."""
+        return self._watermark.watermark()
+    
+    def decode_watermark(self):
+        """Decode watermark from batch images."""
+        return self._watermark.decode_watermark()
+
+
 class ExtractWatermark:
 
-    def __init__(self, market_address: str):
-
+    def __init__(self, market_address: str, watermark_method: str = "lsb"):
+        """
+        Initialize ExtractWatermark.
+        
+        Args:
+            market_address: Address of the market contract
+            watermark_method: Watermarking method to use. Options: "lsb" or "ssl". Default: "lsb"
+        """
         self.market_address = market_address
+        self.watermark_method = watermark_method
 
     def render_extract_watermark(self):
 
@@ -33,7 +82,7 @@ class ExtractWatermark:
             f = NamedTemporaryFile("wb", suffix="." + ext, delete=False)
             f.write(asset.getvalue())
             f.close()
-            wm = Watermark()
+            wm = WatermarkWrapper(self.watermark_method)
             try:
                 oid, bid = wm.extract_watermark(f.name)
                 pair = self.process_watermark(oid, bid)

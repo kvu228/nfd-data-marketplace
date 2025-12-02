@@ -36,12 +36,29 @@ class NFTApp:
         self.upload = Upload(self.factory_address,
                              self.market_contract_address)
         self.market = Market(self.market_contract_address)
-        self.extractwm = ExtractWatermark(self.market_contract_address)
         self.dasboard = Dashboard(self.market_contract_address)
 
     def render_app(self):
 
         st.write("# NFT-Based Data Marketplace with Digital Watermarking")
+        
+        # Sidebar for watermarking algorithm selection
+        with st.sidebar:
+            st.write("## Configuration")
+            # Initialize session state if not present
+            if "watermark_method" not in st.session_state:
+                st.session_state["watermark_method"] = "lsb"
+            
+            # Use selectbox with key that syncs to session state
+            watermark_method = st.selectbox(
+                "Watermarking Algorithm",
+                options=["lsb", "ssl"],
+                index=0 if st.session_state["watermark_method"] == "lsb" else 1,
+                key="watermark_method",
+                help="Choose between LSB (Least Significant Bit) or SSL watermarking algorithm"
+            )
+            st.info(f"Current: **{watermark_method.upper()}** watermarking")
+        
         user, dashboard, upload, market, extract = st.tabs(
             ["User Registration", "Dashboard", "Publish Asset", "Trade", "Identifiability/Traceability"])
 
@@ -53,6 +70,12 @@ class NFTApp:
         '''
 
         st.markdown(hide_img_fs, unsafe_allow_html=True)
+        
+        # Initialize ExtractWatermark with selected method
+        extractwm = ExtractWatermark(
+            self.market_contract_address, 
+            watermark_method=st.session_state["watermark_method"]
+        )
 
         with user:
             UserRegistration.render()
@@ -63,7 +86,7 @@ class NFTApp:
             self.market.render()
 
         with extract:
-            self.extractwm.render()
+            extractwm.render()
 
         with dashboard:
             self.dasboard.render()
