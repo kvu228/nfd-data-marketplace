@@ -7,6 +7,7 @@ from tempfile import NamedTemporaryFile
 from Crypto.Hash import SHA256
 from web3 import Web3
 from db import get_demo_db
+from user_utils import get_user_display_options, get_user_from_display
 import time
 
 
@@ -144,11 +145,15 @@ class Market:
 
         con = get_demo_db()
 
-        res = con.execute("SELECT uname FROM users")
-        users = res.fetchall()
+        display_options, user_data_dict = get_user_display_options(include_balance=True)
+        
+        if not display_options:
+            st.warning("No users registered yet.")
+            con.close()
+            return
 
-        buyer = st.selectbox("Buyer", map(
-            lambda r: r[0], users))
+        selected_display = st.selectbox("Buyer", options=display_options)
+        buyer = get_user_from_display(selected_display, user_data_dict)
         c1, c2 = st.columns(2)
 
         res = con.execute("SELECT id FROM users WHERE uname = ?", [buyer])

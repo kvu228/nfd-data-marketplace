@@ -5,6 +5,7 @@ from contract import AssetAgreement, AssetFactory
 from constants import LOCAL_ENDPOINT
 from db import get_demo_db
 from web3 import Web3
+from user_utils import get_user_display_options, get_user_from_display
 import time
 from decimal import Decimal
 
@@ -21,11 +22,15 @@ class Upload:
         con = get_demo_db()
 
         with st.form("asset-upload"):
+            display_options, user_data_dict = get_user_display_options(include_balance=True)
+            
+            if not display_options:
+                st.warning("No users registered yet. Please register a user first.")
+                con.close()
+                return
 
-            res = con.execute("SELECT uname FROM users")
-
-            owner = st.selectbox("Owner", options=map(
-                lambda r: r[0], res.fetchall()))
+            selected_display = st.selectbox("Owner", options=display_options)
+            owner = get_user_from_display(selected_display, user_data_dict)
 
             asset = st.file_uploader("Asset")
             price = st.number_input("Price (ETH)", min_value=0.0, step=0.01)
