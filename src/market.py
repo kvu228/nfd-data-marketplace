@@ -7,6 +7,7 @@ from tempfile import NamedTemporaryFile
 from Crypto.Hash import SHA256
 from web3 import Web3
 from db import get_demo_db
+import time
 
 
 class Market:
@@ -18,8 +19,12 @@ class Market:
 
     def on_image_buy(self, agreement_address: str, token_id: int, buyer_id: int):
 
+        overall_start = time.time()
         con = get_demo_db()
+        timing_log = []
 
+        # Step 1: Get agreement and seller info
+        start_time = time.time()
         agreement = AssetAgreement(
             LOCAL_ENDPOINT, agreement_address, self.manager_address)
 
@@ -29,12 +34,13 @@ class Market:
         res = con.execute(
             "SELECT id FROM users WHERE wallet = ?", [seller_address])
         seller_id, = res.fetchone()
+        step1_time = time.time() - start_time
+        timing_log.append(f"1. Get agreement and seller info: {step1_time:.3f}s")
 
+        # Step 2: Load image and compute hash
+        start_time = time.time()
         wm_image = NamedTemporaryFile(
             "wb", suffix=".png", delete=False)
-
-        img_hash = None
-        img_hash_hex = None
 
         res = con.execute(
             "SELECT assets.filepath FROM users LEFT JOIN assets ON users.id = assets.owner_id WHERE users.agreement = ? AND assets.token_id = ?", [agreement_address, token_id])
@@ -48,23 +54,34 @@ class Market:
             cipher.update(bytes([seller_id, buyer_id]))
             img_hash = cipher.digest()
             img_hash_hex = cipher.hexdigest()
+        step2_time = time.time() - start_time
+        timing_log.append(f"2. Load image and compute hash: {step2_time:.3f}s")
 
         wm_file_name = wm_image.name
         wm_image.close()
 
-        # Get watermark method from session state, default to "lsb"
+        # Step 3: Watermark the image
+        start_time = time.time()
         watermark_method = st.session_state.get("watermark_method", "lsb")
         wm = WatermarkWrapper(watermark_method)
 
         wm.set_watermark(seller_id, buyer_id)
         wm.watermark_image(wm_file_name)
+        step3_time = time.time() - start_time
+        timing_log.append(f"3. Watermark image ({watermark_method.upper()}): {step3_time:.3f}s")
 
+        # Step 4: Update hash on smart contract
+        start_time = time.time()
         asset_market_manager = AssetMarket(
             LOCAL_ENDPOINT, self.market_address, self.manager_address)
 
         asset_market_manager.update_hash(
             agreement_address, token_id, img_hash)
+        step4_time = time.time() - start_time
+        timing_log.append(f"4. Update hash on smart contract: {step4_time:.3f}s")
         
+        # Step 5: Get buyer wallet and transfer asset
+        start_time = time.time()
         res = con.execute("SELECT wallet FROM users WHERE id = ?", [buyer_id])
         buyer_wallet_address, = res.fetchone()
 
@@ -72,18 +89,27 @@ class Market:
             LOCAL_ENDPOINT, self.market_address, buyer_wallet_address)
         asset_market.purchase(
             agreement_address, token_id, asset_price)
+        step5_time = time.time() - start_time
+        timing_log.append(f"5. Transfer asset to buyer: {step5_time:.3f}s")
 
-        with st.expander("Log"):
-            st.write("1. Asset Decryption with Market key")
-            st.write("2. Finished watermarking file with watermark text: %d, %d" %
-                     (seller_id, buyer_id))
-            st.write("3. Computed Watermarked Image Hash: %s" % img_hash_hex)
-            st.write("5. Added Asset Hash on Smart Contract to: %s" %
-                     img_hash_hex)
-            st.write("6. Transferred Asset from Owner account to Buyer account. Price: %f, Token ID: %d" % (
-                asset_price, token_id))
-            st.write(
-                "7. Updated link on Smart Contract to point to encrypted asset")
+        total_time = time.time() - overall_start
+        timing_log.append(f"**Total time: {total_time:.3f}s**")
+
+        # Display success message with total time prominently
+        st.success(f"✅ Purchase completed successfully in {total_time:.3f}s")
+        
+        # Display summary information
+        st.write("**Purchase Summary:**")
+        st.write(f"- Watermark text: {seller_id}, {buyer_id}")
+        st.write(f"- Image Hash: {img_hash_hex}")
+        st.write(f"- Price: {asset_price} ETH, Token ID: {token_id}")
+        st.write(f"- Watermarking method: {watermark_method.upper()}")
+
+        # Detailed timing log in expander
+        with st.expander("📊 Detailed Runtime Log"):
+            st.write("**Step-by-step timing:**")
+            for log_entry in timing_log:
+                st.write(log_entry)
 
         with open(wm_file_name, "rb") as f:
             st.download_button("Verify Signature and Download Asset",

@@ -178,7 +178,7 @@ class Watermark:
             os.makedirs(self.output_dir, exist_ok=True)
         imgs_dir = os.path.join(self.output_dir, 'imgs')
 
-        os.mkdir(imgs_dir, exist_ok=True)
+        os.makedirs(imgs_dir, exist_ok=True)
         if self.verbose > 0:
             print('>>> Saving images into %s...' % imgs_dir)
 

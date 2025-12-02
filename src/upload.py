@@ -4,6 +4,7 @@ from uuid import uuid4
 from contract import AssetAgreement, AssetFactory
 from constants import LOCAL_ENDPOINT
 from db import get_demo_db
+import time
 
 
 class Upload:
@@ -35,6 +36,11 @@ class Upload:
             if not submit or asset is None:
                 return
 
+            overall_start = time.time()
+            timing_log = []
+
+            # Step 1: Save asset file
+            start_time = time.time()
             data = asset.getvalue()
             filename = basename(asset.name)
             ext = filename.split(".")[-1]
@@ -45,13 +51,21 @@ class Upload:
 
             with open(new_file_location, "wb") as f:
                 f.write(data)
+            step1_time = time.time() - start_time
+            timing_log.append(f"1. Save asset file: {step1_time:.3f}s")
 
+            # Step 2: Get owner info
+            start_time = time.time()
             res = con.execute(
                 "SELECT id, wallet, agreement FROM users WHERE uname = ?", [owner])
 
             owner_id, owner_wallet, owner_agreement = res.fetchone()
+            step2_time = time.time() - start_time
+            timing_log.append(f"2. Get owner info: {step2_time:.3f}s")
 
+            # Step 3: Deploy agreement contract (if needed)
             if owner_agreement is None:
+                start_time = time.time()
                 owner_agreement = AssetFactory(LOCAL_ENDPOINT, self.factory_address, owner_wallet).deploy_asset_agreement(
                     "ASSET", "ASSET", self.market_address)[0]
                 agreement = AssetAgreement(
@@ -61,25 +75,38 @@ class Upload:
                 con.execute("UPDATE users SET agreement = ? WHERE id = ?", [
                             owner_agreement, owner_id])
                 con.commit()
+                step3_time = time.time() - start_time
+                timing_log.append(f"3. Deploy Asset Agreement contract: {step3_time:.3f}s")
+            else:
+                timing_log.append(f"3. Use existing Asset Agreement contract: 0.000s")
 
+            # Step 4: Mint asset
+            start_time = time.time()
             agreement = AssetAgreement(
                 LOCAL_ENDPOINT, owner_agreement, owner_wallet)
 
             token_id = agreement.get_next_token_id()
             agreement.mint([price], [resale])
+            step4_time = time.time() - start_time
+            timing_log.append(f"4. Mint asset (Token ID: {token_id}): {step4_time:.3f}s")
 
+            # Step 5: Save to database
+            start_time = time.time()
             res = con.execute("INSERT INTO assets (owner_id, filepath, token_id) VALUES (?, ?, ?)", [
                               owner_id, new_file_location, token_id])
             con.commit()
+            step5_time = time.time() - start_time
+            timing_log.append(f"5. Save to database: {step5_time:.3f}s")
+
+            total_time = time.time() - overall_start
+            timing_log.append(f"**Total time: {total_time:.3f}s**")
+
             st.write("Asset %s has been uploaded with Token ID: %d" %
                      (asset.name, token_id))
+            st.success(f"✅ Published successfully in {total_time:.3f}s")
+            
             with st.expander("Publish Log"):
-
-                st.write("1. Find/Publish Owner's Asset Agreement contract: %s" %
-                         owner_agreement)
-                st.write("2. Encrypted Asset with Market Public Key")
-                st.write("3. Upload Asset to Data Storage Server")
-                st.write("4. Minting Asset... Token ID: %d" % token_id)
-                st.write(
-                    "5. Approve Market Address to transfer assets on behalf of owner")
+                for log_entry in timing_log:
+                    st.write(log_entry)
+                st.write(f"Agreement contract: {owner_agreement}")
         con.close()

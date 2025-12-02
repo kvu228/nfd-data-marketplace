@@ -5,6 +5,7 @@ from Crypto.Hash import SHA256
 from contract import AssetMarket
 from constants import LOCAL_ENDPOINT
 from db import get_demo_db
+import time
 
 
 class WatermarkWrapper:
@@ -82,17 +83,32 @@ class ExtractWatermark:
             f = NamedTemporaryFile("wb", suffix="." + ext, delete=False)
             f.write(asset.getvalue())
             f.close()
+            
             wm = WatermarkWrapper(self.watermark_method)
+            timing_log = []
+            
             try:
+                # Step 1: Extract watermark
+                start_time = time.time()
                 oid, bid = wm.extract_watermark(f.name)
+                extract_time = time.time() - start_time
+                timing_log.append(f"1. Extract watermark from image: {extract_time:.3f}s")
+                
+                # Step 2: Match watermark IDs to database
+                start_time = time.time()
                 pair = self.process_watermark(oid, bid)
+                db_time = time.time() - start_time
+                timing_log.append(f"2. Match watermark IDs to Owner and Buyer database: {db_time:.3f}s")
+                
+                total_time = extract_time + db_time
                 st.write("Extracted Watermark: Owner = %s, Buyer = %s " % pair)
+                st.success(f"✅ Completed in {total_time:.3f}s")
             except Exception as e:
                 st.write("Watermark extraction failed: %s" % str(e))
 
         with st.expander("Log"):
-            st.write("1. Extract watermark from image")
-            st.write("2. Match watermark IDs to Owner and Buyer datbase")
+            for log_entry in timing_log:
+                st.write(log_entry)
 
     def process_watermark(self, owner_id, buyer_id):
 
@@ -138,26 +154,39 @@ class ExtractWatermark:
 
             owner_agreement, seller_id, seller_wallet, buyer_id = res.fetchone()
 
+            timing_log = []
+            
+            # Step 1: Compute hash of image
+            start_time = time.time()
             cipher = SHA256.new(asset.getvalue())
             cipher.update(bytes([seller_id, buyer_id]))
             img_hash = cipher.digest()
             img_hash_hex = cipher.hexdigest()
+            hash_time = time.time() - start_time
+            timing_log.append(f"1. Compute hash of image: {hash_time:.3f}s")
 
+            # Step 2: Find sale record
+            start_time = time.time()
             market = AssetMarket(
                 LOCAL_ENDPOINT, self.market_address, seller_wallet)
             try:
                 record = market.get_asset_sale_record(
                     owner_agreement, img_hash)
+                record_time = time.time() - start_time
+                timing_log.append(f"2. Find sale record with hash: {record_time:.3f}s")
+                total_time = hash_time + record_time
                 st.write("Owner Address: %s, Buyer Address: %s, Token ID: %d" %
                         (seller_wallet, record[0], record[1]))
-            except:
+                st.success(f"✅ Completed in {total_time:.3f}s")
+            except Exception as e:
+                record_time = time.time() - start_time
+                timing_log.append(f"2. Find sale record (failed): {record_time:.3f}s")
                 st.write("Sale Record does not exist")
 
-
             with st.expander("Log"):
-                st.write("1. Compute hash of image")
-                st.write("2. Find sale record with hash: %s" %
-                            (img_hash_hex))
+                for log_entry in timing_log:
+                    st.write(log_entry)
+                st.write(f"Hash: {img_hash_hex}")
         con.close()
 
     def render(self):
