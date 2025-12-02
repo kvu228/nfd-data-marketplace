@@ -93,11 +93,10 @@ Biểu đồ sau minh họa luồng sự kiện từ góc độ smart contract:
 
 Trước khi thiết lập dự án, đảm bảo bạn đã cài đặt các phần mềm sau:
 
-- **Python**: 3.8.15 (theo chỉ định trong `pyproject.toml`)
+- **Python**: >=3.12 (theo chỉ định trong `pyproject.toml`)
 - **Node.js**: v16.14.0 (bắt buộc cho Hardhat)
-- **Poetry**: Để quản lý phụ thuộc Python
+- **uv**: Để quản lý phụ thuộc Python (cài đặt từ [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv))
 - **npm**: Để quản lý gói Node.js
-- **Conda**: Để quản lý môi trường (tùy chọn, nhưng được khuyến nghị)
 - **SQLite3**: Để thao tác cơ sở dữ liệu
 - **Git**: Để quản lý phiên bản
 
@@ -112,19 +111,30 @@ cd demo
 
 ### 2. Thiết Lập Môi Trường Python
 
-Cài đặt các phụ thuộc bằng Poetry:
+Cài đặt các phụ thuộc bằng uv:
 
 ```bash
-poetry install
+# Đồng bộ môi trường và cài đặt dependencies
+uv sync
 ```
 
-Hoặc nếu sử dụng Conda:
+Hoặc nếu bạn muốn tạo môi trường ảo riêng:
 
 ```bash
-conda create -n nft-data python=3.8.15
-conda activate nft-data
-pip install -r requirements.txt
+# Tạo môi trường ảo
+uv venv
+
+# Kích hoạt môi trường (Windows)
+.venv\Scripts\activate
+
+# Kích hoạt môi trường (Linux/Mac)
+source .venv/bin/activate
+
+# Cài đặt dependencies
+uv pip install -e .
 ```
+
+> **Lưu ý**: `uv sync` sẽ tự động tạo môi trường ảo và cài đặt tất cả dependencies từ `pyproject.toml` và `uv.lock`.
 
 ### 3. Cài Đặt Phụ Thuộc Node.js
 
@@ -245,8 +255,9 @@ Nếu bạn muốn chạy các thành phần thủ công:
 ├── bootstrap_lsb.sh     # Bootstrap Linux/Mac cho LSB
 ├── hardhat.config.js     # Cấu hình Hardhat
 ├── package.json          # Phụ thuộc Node.js
-├── pyproject.toml        # Cấu hình Poetry
-└── requirements.txt      # Phụ thuộc Python
+├── pyproject.toml        # Cấu hình dự án Python và dependencies
+├── uv.lock               # Lock file cho uv (phiên bản cụ thể của dependencies)
+└── requirements.txt      # Phụ thuộc Python (legacy, không còn sử dụng)
 ```
 
 ## Endpoint Node Ethereum
@@ -340,10 +351,23 @@ npx hardhat run scripts/deploy.js --network localhost
 
 ### Phát Triển Python
 
-Codebase Python sử dụng Poetry để quản lý phụ thuộc. Để thêm phụ thuộc mới:
+Codebase Python sử dụng uv để quản lý phụ thuộc. Để thêm phụ thuộc mới:
 
 ```bash
-poetry add <package-name>
+# Thêm dependency mới và cập nhật pyproject.toml
+uv add <package-name>
+
+# Hoặc thêm dependency cho development
+uv add --dev <package-name>
+
+# Cập nhật uv.lock sau khi thay đổi dependencies
+uv lock
+```
+
+Để xóa một dependency:
+
+```bash
+uv remove <package-name>
 ```
 
 ## Khắc Phục Sự Cố

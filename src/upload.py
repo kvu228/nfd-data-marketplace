@@ -6,6 +6,7 @@ from constants import LOCAL_ENDPOINT
 from db import get_demo_db
 from web3 import Web3
 import time
+from decimal import Decimal
 
 
 class Upload:
@@ -66,7 +67,7 @@ class Upload:
 
             # Step 3: Deploy agreement contract (if needed)
             total_gas = 0
-            total_fee_eth = 0.0
+            total_fee_eth = Decimal('0.0')
             if owner_agreement is None:
                 start_time = time.time()
                 factory = AssetFactory(LOCAL_ENDPOINT, self.factory_address, owner_wallet)
