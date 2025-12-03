@@ -66,13 +66,26 @@ class Upload:
                 LOCAL_ENDPOINT, owner_agreement, owner_wallet)
 
             token_id = agreement.get_next_token_id()
-            agreement.mint([price], [resale])
+            
+            # Đảm bảo resale là boolean
+            resale_bool = bool(resale) if resale is not None else False
+            
+            # Mint với resale status
+            agreement.mint([price], [resale_bool])
+            
+            # Verify giá trị sau khi mint
+            try:
+                _, _, forSale_check, resaleAllowed_check = agreement.fetch_asset_metadata(token_id)
+                st.info(f"📊 Asset minted: Token ID={token_id}, forSale={forSale_check}, resaleAllowed={resaleAllowed_check}")
+            except:
+                pass
 
             res = con.execute("INSERT INTO assets (owner_id, filepath, token_id) VALUES (?, ?, ?)", [
                               owner_id, new_file_location, token_id])
             con.commit()
             st.write("Asset %s has been uploaded with Token ID: %d" %
                      (asset.name, token_id))
+            st.write(f"Resale Allowed: {resale_bool}")
             with st.expander("Publish Log"):
 
                 st.write("1. Find/Publish Owner's Asset Agreement contract: %s" %

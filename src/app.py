@@ -20,12 +20,38 @@ class NFTApp:
 
     def __init__(self, eth_endpoint: str) -> None:
         self.web3 = get_web3_provider(eth_endpoint)
+        
+        # Kiểm tra kết nối với Hardhat node
+        if not self.web3.isConnected():
+            st.error(f"❌ Không thể kết nối với Hardhat node tại {eth_endpoint}")
+            st.error("Vui lòng đảm bảo Hardhat node đang chạy bằng lệnh: `npx hardhat node`")
+            st.stop()
+        
+        # Kiểm tra xem có accounts không
+        try:
+            accounts = self.web3.eth.accounts
+            if len(accounts) == 0:
+                st.error("❌ Không tìm thấy accounts trong Hardhat node")
+                st.error("Vui lòng đảm bảo Hardhat node đã khởi động đúng cách")
+                st.stop()
+        except Exception as e:
+            st.error(f"❌ Lỗi khi kiểm tra accounts: {str(e)}")
+            st.error("Vui lòng đảm bảo Hardhat node đang chạy tại http://127.0.0.1:8545/")
+            st.stop()
 
-        self.market_contract_address = AssetMarket.deploy(
-            eth_endpoint, self.web3.eth.accounts[0])[0]
+        try:
+            self.market_contract_address = AssetMarket.deploy(
+                eth_endpoint, self.web3.eth.accounts[0])[0]
 
-        self.factory_address = AssetFactory.deploy(
-            eth_endpoint, self.web3.eth.accounts[0], self.market_contract_address)[0]
+            self.factory_address = AssetFactory.deploy(
+                eth_endpoint, self.web3.eth.accounts[0], self.market_contract_address)[0]
+        except Exception as e:
+            st.error(f"❌ Lỗi khi deploy contracts: {str(e)}")
+            st.error("Vui lòng kiểm tra:")
+            st.error("1. Hardhat node đang chạy")
+            st.error("2. Smart contracts đã được compile: `npx hardhat compile`")
+            st.error("3. Có đủ accounts và ETH trong Hardhat node")
+            st.stop()
 
         # self.owner_registration = OwnerRegistration(
         #     self.factory_address, self.market_contract_address)

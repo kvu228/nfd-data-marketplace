@@ -37,7 +37,10 @@ class ExtractWatermark:
             try:
                 oid, bid = wm.extract_watermark(f.name)
                 pair = self.process_watermark(oid, bid)
-                st.write("Extracted Watermark: Owner = %s, Buyer = %s " % pair)
+                if pair and len(pair) >= 2:
+                    st.write("Extracted Watermark: Owner = %s, Buyer = %s " % (pair[0], pair[1]))
+                else:
+                    st.write("Extracted Watermark IDs: Owner ID = %s, Buyer ID = %s (Not found in database)" % (oid, bid))
             except Exception as e:
                 st.write("Watermark extraction failed: %s" % str(e))
 
@@ -54,6 +57,9 @@ class ExtractWatermark:
         data = res.fetchone()
         con.close()
 
+        # Trả về None nếu không tìm thấy, hoặc tuple với 2 phần tử
+        if data is None:
+            return None
         return data
 
     def render_recovery(self):

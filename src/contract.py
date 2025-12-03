@@ -5,6 +5,26 @@ from json import loads, dumps
 PROVIDER_CACHE: 'dict[str, Web3]' = dict()
 
 
+def to_wei(amount: float, unit: str = "ether"):
+    """
+    Compatibility helper for web3.py v5/v6 differences.
+    """
+    if hasattr(Web3, "to_wei"):
+        return Web3.to_wei(amount, unit)
+    # web3.py v5
+    return Web3.toWei(amount, unit)
+
+
+def from_wei(value, unit: str = "ether"):
+    """
+    Compatibility helper for web3.py v5/v6 differences.
+    """
+    if hasattr(Web3, "from_wei"):
+        return Web3.from_wei(value, unit)
+    # web3.py v5
+    return Web3.fromWei(value, unit)
+
+
 def ContractDeployOnce(contract_name: str):
     def Decorator(F: callable):
         def NewDeploy(*args, **kwargs):
@@ -136,8 +156,9 @@ class Contract:
 
         if Contract.PRIVATE_KEY is not None:
 
-            txn = call.buildTransaction() if value is None else call.buildTransaction({
-                "value": Web3.toWei(value, "ether")})
+            txn = call.buildTransaction() if value is None else call.buildTransaction(
+                {"value": to_wei(value, "ether")}
+            )
 
             account_address = Contract.W3_PROVIDER.eth.account.from_key(
                 Contract.PRIVATE_KEY).address
@@ -155,7 +176,11 @@ class Contract:
             return Contract.W3_PROVIDER.eth.send_raw_transaction(signed_txn.rawTransaction)
         else:
 
-            return call.transact({'value': Web3.toWei(value, "ether")}) if value is not None else call.transact()
+            return (
+                call.transact({"value": to_wei(value, "ether")})
+                if value is not None
+                else call.transact()
+            )
 
     @staticmethod
     def set_private_key(key: str):
@@ -186,11 +211,20 @@ class AssetFactory(Contract):
         tx_hash = Contract.send_contract_call(self.factory_contract.functions.createNewAssetAgreement(name, symbol,
                                                                                                       market_address))
         tx_receipt = self.w3.eth.wait_for_transaction_receipt(
-            tx_hash, timeout=600)
+            tx_hash, timeout=600
+        )
 
-        data = self.factory_contract.events.NewContract().processReceipt(tx_receipt)
+        # web3.py v5 uses camelCase `processReceipt`
+        data = self.factory_contract.events.NewContract().processReceipt(
+            tx_receipt
+        )
 
-        contract_address = data[0]["args"]["contractAddress"]
+        # contract_address = data[0]["args"]["contractAddress"]
+        if data and len(data) > 0:
+            contract_address = data[0]["args"]["contractAddress"]
+        else:
+            raise ValueError("No logs found. Contract may not have deployed correctly.")
+
 
         return contract_address, tx_receipt.gasUsed
 
@@ -245,7 +279,7 @@ class AssetMarket(Contract):
 
     def update_market_royalty(self, royalty: float):
 
-        v = Web3.toWei(royalty, "ether")
+        v = to_wei(royalty, "ether")
 
         tx_hash = Contract.send_contract_call(self.market_contract.functions.updateMarketRoyalty(
             v))
@@ -262,10 +296,16 @@ class AssetMarket(Contract):
         tx_hash = Contract.send_contract_call(self.market_contract.functions.updateSaleStatus(
             agreement,  tokenID, status))
 
-        return self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600)
+        tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600)
+        
+        # Kiểm tra transaction status
+        if tx_receipt.status != 1:
+            raise Exception(f"Transaction failed with status: {tx_receipt.status}. Transaction hash: {tx_hash.hex() if hasattr(tx_hash, 'hex') else tx_hash}")
+        
+        return tx_receipt
 
     def update_price(self, agreement: str, tokenID: int, price: float):
-        v = Web3.toWei(price, "ether")
+        v = to_wei(price, "ether")
         tx_hash = Contract.send_contract_call(self.market_contract.functions.updatePrice(
             agreement, tokenID, v))
         return self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600)
@@ -287,10 +327,29 @@ class AssetAgreement(Contract):
         return self.agreement_contract.functions.ownerOf(tokenID).call()
 
     def get_next_token_id(self):
-        return self.agreement_contract.functions.getNextTokenId().call()
+        # AssetAgreement.sol (ERC721A) does not expose getNextTokenId(),
+        # but it does expose totalSupply(). Since token IDs are sequential
+        # starting from 0 and there is no burn in this demo, the next token
+        # ID equals the current totalSupply.
+        return self.agreement_contract.functions.totalSupply().call()
 
     def fetch_asset_metadata(self, tokenID: int):
-        return self.agreement_contract.functions.fetchAssetMetaData(tokenID).call()
+        """
+        Compatibility helper used by the original demo UI.
+        The Solidity contract does NOT expose a single fetchAssetMetaData()
+        function; instead we compose the metadata from individual getters:
+        - priceOf(_tokenId)
+        - isForSale(_tokenId)
+        - isResaleAllowed(_tokenId)
+
+        Return format keeps backward-compatibility with the original Python:
+        (price_wei, assetHash_placeholder, forSale, resaleAllowed)
+        """
+        price_wei = self.agreement_contract.functions.priceOf(tokenID).call()
+        for_sale = self.agreement_contract.functions.isForSale(tokenID).call()
+        resale_allowed = self.agreement_contract.functions.isResaleAllowed(tokenID).call()
+        # assetHash is not readable on-chain in current Solidity, so we return None
+        return price_wei, None, for_sale, resale_allowed
 
     def get_owner(self):
         return self.agreement_contract.functions.getOwner().call()
@@ -300,7 +359,7 @@ class AssetAgreement(Contract):
 
     def update_owner_royalty(self, royalty: float):
 
-        v = Web3.toWei(royalty, "ether")
+        v = to_wei(royalty, "ether")
 
         tx_hash = Contract.send_contract_call(self.agreement_contract.functions.updateOwnerRoyalty(
             v))
@@ -318,8 +377,8 @@ class AssetAgreement(Contract):
 
     def price_of(self, tokenID: int):
         value = self.agreement_contract.functions.priceOf(tokenID).call()
-        value = Web3.fromWei(value, "ether")
-        return float(value)
+        value_eth = from_wei(value, "ether")
+        return float(value_eth)
 
     def update_market_address(self, address: str):
 
@@ -349,7 +408,7 @@ class AssetAgreement(Contract):
         return self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600)
 
     def mint(self, prices: 'list[float]', resaleAllowed: 'list[bool]'):
-        v = list(map(lambda r: Web3.toWei(r, "ether"), prices))
+        v = [to_wei(r, "ether") for r in prices]
         tx_hash = Contract.send_contract_call(self.agreement_contract.functions.mint(
             v, resaleAllowed))
 
