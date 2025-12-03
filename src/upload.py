@@ -82,7 +82,7 @@ class Upload:
                     factory.factory_contract.functions.createNewAssetAgreement(
                         "ASSET", "ASSET", self.market_address))
                 deploy_receipt = factory.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600)
-                data = factory.factory_contract.events.NewContract().processReceipt(deploy_receipt)
+                data = factory.factory_contract.events.NewContract().process_receipt(deploy_receipt)
                 owner_agreement = data[0]["args"]["contractAddress"]
                 deploy_gas = deploy_receipt.gasUsed
                 
@@ -94,11 +94,11 @@ class Upload:
                 # Calculate fees
                 deploy_tx = factory.w3.eth.get_transaction(deploy_receipt.transactionHash)
                 deploy_gas_price = deploy_tx.get('gasPrice') or deploy_receipt.get('effectiveGasPrice', 0)
-                deploy_fee_eth = Web3.fromWei(deploy_gas * deploy_gas_price, 'ether')
+                deploy_fee_eth = Web3.from_wei(deploy_gas * deploy_gas_price, 'ether')
                 
                 approval_tx = agreement.w3.eth.get_transaction(approval_receipt.transactionHash)
                 approval_gas_price = approval_tx.get('gasPrice') or approval_receipt.get('effectiveGasPrice', 0)
-                approval_fee_eth = Web3.fromWei(approval_gas * approval_gas_price, 'ether')
+                approval_fee_eth = Web3.from_wei(approval_gas * approval_gas_price, 'ether')
 
                 con.execute("UPDATE users SET agreement = ? WHERE id = ?", [
                             owner_agreement, owner_id])
@@ -124,7 +124,7 @@ class Upload:
             # Calculate fee
             mint_tx = agreement.w3.eth.get_transaction(mint_receipt.transactionHash)
             mint_gas_price = mint_tx.get('gasPrice') or mint_receipt.get('effectiveGasPrice', 0)
-            mint_fee_eth = Web3.fromWei(mint_gas * mint_gas_price, 'ether')
+            mint_fee_eth = Web3.from_wei(mint_gas * mint_gas_price, 'ether')
             total_gas += mint_gas
             total_fee_eth += mint_fee_eth
             timing_log.append(f"4. Mint asset (Token ID: {token_id}): {step4_time:.3f}s (Gas: {mint_gas:,} gas, Fee: {mint_fee_eth:.9f} ETH)")
