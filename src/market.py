@@ -112,7 +112,7 @@ class Market:
         purchase_fee_wei = purchase_gas * purchase_gas_price
         purchase_fee_eth = Web3.from_wei(purchase_fee_wei, 'ether')
         timing_log.append(f"5. Transfer asset to buyer: {step5_time:.3f}s (Gas: {purchase_gas:,} gas, Fee: {purchase_fee_eth:.9f} ETH)")
-        
+
         # Calculate total gas and total fee
         total_gas = update_hash_gas + purchase_gas
         total_fee_eth = update_hash_fee_eth + purchase_fee_eth
@@ -123,10 +123,9 @@ class Market:
         timing_log.append(f"**Total gas fee: {total_fee_eth:.9f} ETH**")
 
         # Display success message with total time prominently
-        progress_bar.progress(100, text="Completed")
         progress_text.write("Purchase completed.")
         st.success(f"✅ Purchase completed successfully in {total_time:.3f}s")
-        
+
         # Display summary information
         st.write("**Purchase Summary:**")
         st.write(f"- Watermark text: {seller_id}, {buyer_id}")
@@ -156,7 +155,7 @@ class Market:
         con = get_demo_db()
 
         display_options, user_data_dict = get_user_display_options(include_balance=True)
-        
+
         if not display_options:
             st.warning("No users registered yet.")
             con.close()
