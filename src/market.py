@@ -24,7 +24,11 @@ class Market:
         con = get_demo_db()
         timing_log = []
 
+        progress_text = st.empty()
+        progress_bar = st.progress(0, text="Initializing purchase...")
+
         # Step 1: Get agreement and seller info
+        progress_bar.progress(10, text="Step 1/5: Fetching agreement and seller information...")
         start_time = time.time()
         agreement = AssetAgreement(
             LOCAL_ENDPOINT, agreement_address, self.manager_address)
@@ -39,6 +43,7 @@ class Market:
         timing_log.append(f"1. Get agreement and seller info: {step1_time:.3f}s")
 
         # Step 2: Load image and compute hash
+        progress_bar.progress(30, text="Step 2/5: Loading image and computing hash...")
         start_time = time.time()
         wm_image = NamedTemporaryFile(
             "wb", suffix=".png", delete=False)
@@ -62,6 +67,7 @@ class Market:
         wm_image.close()
 
         # Step 3: Watermark the image
+        progress_bar.progress(50, text="Step 3/5: Applying watermark to the image...")
         start_time = time.time()
         watermark_method = st.session_state.get("watermark_method", "lsb")
         wm = WatermarkWrapper(watermark_method)
@@ -72,6 +78,7 @@ class Market:
         timing_log.append(f"3. Watermark image ({watermark_method.upper()}): {step3_time:.3f}s")
 
         # Step 4: Update hash on smart contract
+        progress_bar.progress(70, text="Step 4/5: Updating hash on smart contract...")
         start_time = time.time()
         asset_market_manager = AssetMarket(
             LOCAL_ENDPOINT, self.market_address, self.manager_address)
@@ -86,8 +93,9 @@ class Market:
         update_hash_fee_wei = update_hash_gas * update_hash_gas_price
         update_hash_fee_eth = Web3.from_wei(update_hash_fee_wei, 'ether')
         timing_log.append(f"4. Update hash on smart contract: {step4_time:.3f}s (Gas: {update_hash_gas:,} gas, Fee: {update_hash_fee_eth:.9f} ETH)")
-        
+
         # Step 5: Get buyer wallet and transfer asset
+        progress_bar.progress(90, text="Step 5/5: Transferring asset to buyer...")
         start_time = time.time()
         res = con.execute("SELECT wallet FROM users WHERE id = ?", [buyer_id])
         buyer_wallet_address, = res.fetchone()
@@ -115,6 +123,8 @@ class Market:
         timing_log.append(f"**Total gas fee: {total_fee_eth:.9f} ETH**")
 
         # Display success message with total time prominently
+        progress_bar.progress(100, text="Completed")
+        progress_text.write("Purchase completed.")
         st.success(f"✅ Purchase completed successfully in {total_time:.3f}s")
         
         # Display summary information
