@@ -101,7 +101,7 @@ class Watermark:
         if os.path.exists(carrier_path):
             if self.verbose > 0:
                 print('>>> Loading carrier from %s' % carrier_path)
-            self.carrier = torch.load(carrier_path)
+            self.carrier = torch.load(carrier_path, weights_only=False)
             assert D == self.carrier.shape[1]
         else:
             if self.verbose > 0:

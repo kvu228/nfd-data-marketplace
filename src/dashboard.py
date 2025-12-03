@@ -60,7 +60,7 @@ class Dashboard:
             pil_img = pil_img.resize((pil_img.width//4, pil_img.height//4))
 
             st.image(pil_img, "Original Owner: %s. Price (%f ETH). Resale: %r. For Sale: %r" % (
-                user_name, Web3.fromWei(price, "ether"), resaleAllowed, forSale))
+                user_name, Web3.from_wei(price, "ether"), resaleAllowed, forSale))
 
             sale_status = st.button(
                 "Toggle Sale Status", disabled=not resaleAllowed, key=i)

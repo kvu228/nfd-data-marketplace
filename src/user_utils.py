@@ -32,10 +32,11 @@ def get_user_display_options(include_balance: bool = True):
         for uname, wallet in users:
             try:
                 balance_wei = web3.eth.get_balance(wallet)
-                balance_eth = Web3.fromWei(balance_wei, 'ether')
+                balance_eth = Web3.from_wei(balance_wei, 'ether')
                 display_text = f"{uname} ({wallet[:10]}...{wallet[-8:]}) - {balance_eth:.4f} ETH"
-            except Exception:
+            except Exception as e:
                 # Fallback if balance fetch fails
+                print("Error get_balance for", wallet, ":", e)
                 display_text = f"{uname} ({wallet[:10]}...{wallet[-8:]}) - N/A"
                 balance_eth = 0.0
             

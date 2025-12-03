@@ -78,7 +78,7 @@ def main(params):
     if os.path.exists(carrier_path):
         if params.verbose > 0:
             print('>>> Loading carrier from %s' % carrier_path)
-        carrier = torch.load(carrier_path)
+        carrier = torch.load(carrier_path, weights_only=False)
         assert D == carrier.shape[1]
     else:
         if params.verbose > 0:

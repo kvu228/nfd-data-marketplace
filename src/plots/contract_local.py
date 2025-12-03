@@ -284,7 +284,7 @@ class AssetAgreement(Contract):
 
     def price_of(self, tokenID: int):
         value = self.agreement_contract.functions.priceOf(tokenID).call()
-        value = Web3.fromWei(value, "ether")
+        value = Web3.from_wei(value, "ether")
         return float(value)
 
     def update_market_address(self, address: str):
