@@ -78,7 +78,12 @@ def main(params):
     if os.path.exists(carrier_path):
         if params.verbose > 0:
             print('>>> Loading carrier from %s' % carrier_path)
-        carrier = torch.load(carrier_path, weights_only=False)
+        # Try with weights_only for PyTorch 2.0+, fallback for older versions
+        try:
+            carrier = torch.load(carrier_path, weights_only=False)
+        except TypeError:
+            # PyTorch < 2.0 doesn't support weights_only parameter
+            carrier = torch.load(carrier_path)
         assert D == carrier.shape[1]
     else:
         if params.verbose > 0:

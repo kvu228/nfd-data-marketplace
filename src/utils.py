@@ -1,6 +1,59 @@
 from json import loads
 from provider import get_web3_provider
 from Crypto.Util.strxor import strxor
+from web3 import Web3
+
+
+def from_wei(value, unit='ether'):
+    """
+    Convert wei to ether (compatible with different web3.py versions).
+    
+    Args:
+        value: Value in wei
+        unit: Unit to convert to (default: 'ether')
+    
+    Returns:
+        Value in the specified unit
+    """
+    try:
+        # Try web3.py v6+ format (from_wei as class method)
+        return Web3.from_wei(value, unit)
+    except AttributeError:
+        try:
+            # Try web3.py v5 format (fromWei as class method)
+            return Web3.fromWei(value, unit)
+        except AttributeError:
+            # Fallback: manual conversion for ether
+            if unit == 'ether':
+                return value / 1e18
+            else:
+                raise ValueError(f"Unsupported unit: {unit}")
+
+
+def to_wei(value, unit='ether'):
+    """
+    Convert ether to wei (compatible with different web3.py versions).
+    
+    Args:
+        value: Value in ether (or specified unit)
+        unit: Unit to convert from (default: 'ether')
+    
+    Returns:
+        Value in wei
+    """
+    try:
+        # Try web3.py v6+ format (to_wei as class method)
+        return Web3.to_wei(value, unit)
+    except AttributeError:
+        try:
+            # Try web3.py v5 format (toWei as class method)
+            return Web3.toWei(value, unit)
+        except AttributeError:
+            # Fallback: manual conversion for ether
+            if unit == 'ether':
+                return int(value * 1e18)
+            else:
+                raise ValueError(f"Unsupported unit: {unit}")
 
 
 def xor_cipher(data: bytes, key: bytes):
