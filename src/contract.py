@@ -29,7 +29,7 @@ def ContractDeployOnce(contract_name: str):
 
 def get_web3_provider(endpoint):
 
-    if endpoint not in PROVIDER_CACHE or not PROVIDER_CACHE[endpoint].is_connected():
+    if endpoint not in PROVIDER_CACHE or not PROVIDER_CACHE[endpoint].isConnected():
         PROVIDER_CACHE[endpoint] = Web3(Web3.HTTPProvider(
             endpoint, request_kwargs={'verify': False}))
         # PROVIDER_CACHE[endpoint].eth.set_gas_price_strategy(medium_gas_price_strategy)
