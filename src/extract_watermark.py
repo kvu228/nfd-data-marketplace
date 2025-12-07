@@ -33,8 +33,27 @@ class WatermarkWrapper:
         self._watermark = Watermark()
     
     def extract_watermark(self, img_filepath: str):
-        """Extract watermark from image."""
-        return self._watermark.extract_watermark(img_filepath)
+        """
+        Extract watermark from image.
+        
+        For SSL: Handles exceptions that may occur during extraction:
+        - IndexError: if decode_watermark returns empty list
+        - ValueError: if binary string is invalid or too short
+        
+        Returns:
+            tuple: (owner_id, buyer_id) or raises exception
+        """
+        try:
+            return self._watermark.extract_watermark(img_filepath)
+        except (IndexError, ValueError) as e:
+            # SSL extract may raise these exceptions when:
+            # - decode_watermark returns empty list (IndexError)
+            # - binary string is invalid or too short (ValueError)
+            # Re-raise with more context
+            raise ValueError(f"SSL watermark extraction failed: {str(e)}. The image may not contain a valid SSL watermark.") from e
+        except Exception as e:
+            # Re-raise other exceptions as-is
+            raise
     
     def set_watermark(self, owner_id: int, buyer_id: int):
         """Set watermark with owner and buyer IDs."""
@@ -66,6 +85,107 @@ class ExtractWatermark:
         self.market_address = market_address
         self.watermark_method = watermark_method
 
+    def detect_watermark_type(self, img_filepath: str):
+        """
+        Detect watermark type (LSB or SSL) by trying both methods.
+        
+        Args:
+            img_filepath: Path to the watermarked image
+        
+        Returns:
+            tuple: (detected_method, owner_id, buyer_id) or (None, None, None) if not found
+        """
+        detected_method = None
+        oid = None
+        bid = None
+        
+        # Try LSB first (faster)
+        try:
+            wm_lsb = WatermarkWrapper("lsb")
+            oid, bid = wm_lsb.extract_watermark(img_filepath)
+            # Validate by checking if IDs exist in database
+            # LSB can have false positives, so we validate against database
+            if self._validate_watermark_ids(oid, bid):
+                detected_method = "lsb"
+                return detected_method, oid, bid
+        except Exception:
+            pass
+        
+        # Try SSL if LSB failed
+        try:
+            wm_ssl = WatermarkWrapper("ssl")
+            oid, bid = wm_ssl.extract_watermark(img_filepath)
+            # For SSL: if extract succeeded (no exception), we got values
+            # SSL extract_watermark() always returns values when it succeeds
+            # So if we get here without exception, it's likely a watermark
+            
+            # Debug logging
+            print(f"🔍 SSL extract succeeded: oid={oid}, bid={bid}, type(oid)={type(oid)}, type(bid)={type(bid)}")
+            
+            # IMPORTANT: If extract succeeded (no exception), we have a watermark
+            # SSL always returns values when extract succeeds, so we should return it
+            # Validate IDs are in reasonable range (0-63 for 6 bits)
+            if oid is not None and bid is not None:
+                # Check if IDs are in valid range
+                if 0 <= oid <= 63 and 0 <= bid <= 63:
+                    # Check if IDs exist in database (preferred)
+                    if self._validate_watermark_ids(oid, bid):
+                        detected_method = "ssl"
+                        print(f"✅ SSL watermark detected (in DB): oid={oid}, bid={bid}")
+                        return detected_method, oid, bid
+                    else:
+                        # Extract succeeded and IDs are valid but not in DB
+                        # For SSL, this could still be a watermark from another system
+                        # Return it anyway since extract succeeded
+                        detected_method = "ssl"
+                        print(f"✅ SSL watermark detected (not in DB): oid={oid}, bid={bid}")
+                        return detected_method, oid, bid
+                else:
+                    # IDs out of range - might be corrupted watermark or false positive
+                    # But since extract succeeded, we should still return it
+                    print(f"⚠️ SSL extract returned out-of-range IDs: oid={oid}, bid={bid} (but extract succeeded)")
+                    detected_method = "ssl"
+                    return detected_method, oid, bid
+            else:
+                # Extract returned None values - this shouldn't happen
+                print(f"❌ SSL extract returned None values: oid={oid}, bid={bid}")
+        except Exception as e:
+            # If extract fails with exception, no watermark detected
+            import traceback
+            error_type = type(e).__name__
+            error_msg = str(e)
+            print(f"❌ SSL extract exception in detect_watermark_type ({error_type}): {error_msg}")
+            print(f"Traceback: {traceback.format_exc()}")
+            # Don't suppress the exception - let it propagate for debugging
+            # But don't fail the whole detection, just skip SSL
+            pass
+        
+        return detected_method, oid, bid
+    
+    def _validate_watermark_ids(self, owner_id, buyer_id):
+        """
+        Validate watermark IDs by checking if they exist in database.
+        
+        Args:
+            owner_id: Owner ID from watermark
+            buyer_id: Buyer ID from watermark
+        
+        Returns:
+            bool: True if both IDs exist in database
+        """
+        try:
+            con = get_demo_db()
+            res_owner = con.execute("SELECT id FROM users WHERE id = ?", [owner_id])
+            owner_exists = res_owner.fetchone() is not None
+            
+            res_buyer = con.execute("SELECT id FROM users WHERE id = ?", [buyer_id])
+            buyer_exists = res_buyer.fetchone() is not None
+            
+            con.close()
+            return owner_exists and buyer_exists
+        except Exception:
+            return False
+
     def render_extract_watermark(self):
 
         st.write("## Identifiability (Detectability): Asset Watermark Extraction")
@@ -85,29 +205,59 @@ class ExtractWatermark:
             f.write(asset.getvalue())
             f.close()
             
-            wm = WatermarkWrapper(self.watermark_method)
             timing_log = []
             
             try:
-                # Step 1: Extract watermark
+                # Step 1: Detect watermark type and extract
                 start_time = time.time()
-                oid, bid = wm.extract_watermark(f.name)
-                extract_time = time.time() - start_time
-                timing_log.append(f"1. Extract watermark from image: {extract_time:.3f}s")
+                detected_method, oid, bid = self.detect_watermark_type(f.name)
+                detect_time = time.time() - start_time
                 
-                # Step 2: Match watermark IDs to database
-                start_time = time.time()
-                pair = self.process_watermark(oid, bid)
-                db_time = time.time() - start_time
-                timing_log.append(f"2. Match watermark IDs to Owner and Buyer database: {db_time:.3f}s")
-                
-                total_time = extract_time + db_time
-                st.write("Extracted Watermark: Owner = %s, Buyer = %s " % pair)
-                st.success(f"✅ Completed in {total_time:.3f}s")
+                if detected_method is None:
+                    st.error("❌ **Watermark Not Found**")
+                    st.warning("Could not detect watermark using either LSB or SSL method. The image may not be watermarked or the watermark may be corrupted.")
+                    timing_log.append(f"1. Detect watermark type: {detect_time:.3f}s (❌ Not found)")
+                    
+                    # Show debug info
+                    with st.expander("🔍 Debug Information", expanded=False):
+                        st.write(f"**Owner ID extracted:** {oid}")
+                        st.write(f"**Buyer ID extracted:** {bid}")
+                        st.write("**Note:** Check console output for detailed SSL extraction logs.")
+                else:
+                    timing_log.append(f"1. Detect watermark type: {detect_time:.3f}s (✓ {detected_method.upper()} detected)")
+                    
+                    # Step 2: Match watermark IDs to database
+                    start_time = time.time()
+                    pair = self.process_watermark(oid, bid)
+                    db_time = time.time() - start_time
+                    timing_log.append(f"2. Match watermark IDs to Owner and Buyer database: {db_time:.3f}s")
+                    
+                    total_time = detect_time + db_time
+                    
+                    # Display results
+                    st.success(f"✅ **Watermark Extracted Successfully**")
+                    st.info(f"**Watermark Type:** {detected_method.upper()}")
+                    
+                    if pair and pair[0] and pair[1]:
+                        # IDs found in database
+                        st.write("**Extracted Watermark:** Owner = %s, Buyer = %s " % pair)
+                    else:
+                        # IDs not found in database
+                        st.write(f"**Extracted Watermark:** Owner ID = {oid}, Buyer ID = {bid}")
+                        st.warning("⚠️ **Note:** The owner/buyer IDs are not in the current database. This image may have been watermarked in a different system or the IDs may have been removed.")
+                    
+                    st.success(f"Completed in {total_time:.3f}s")
             except Exception as e:
-                st.write("Watermark extraction failed: %s" % str(e))
+                import traceback
+                st.error(f"❌ **Extraction Failed:** {str(e)}")
+                timing_log.append(f"Error: {str(e)}")
+                
+                # Show detailed error for debugging
+                with st.expander("🔍 Error Details", expanded=True):
+                    st.code(traceback.format_exc())
+                    st.write("**Error Type:**", type(e).__name__)
 
-        with st.expander("Log"):
+        with st.expander("Extraction Log"):
             for log_entry in timing_log:
                 st.write(log_entry)
 

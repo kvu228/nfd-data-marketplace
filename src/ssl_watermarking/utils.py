@@ -41,7 +41,12 @@ def build_backbone(path, name):
             checkpoint = torch.hub.load_state_dict_from_url(path, progress=False, map_location=device)
         else:
             cur_path = os.getcwd()
-            checkpoint = torch.load(path, map_location=device, weights_only=False)
+            # Try with weights_only for PyTorch 2.0+, fallback for older versions
+            try:
+                checkpoint = torch.load(path, map_location=device, weights_only=False)
+            except TypeError:
+                # PyTorch < 2.0 doesn't support weights_only parameter
+                checkpoint = torch.load(path, map_location=device)
         state_dict = checkpoint
         for ckpt_key in ['state_dict', 'model_state_dict', 'teacher']:
             if ckpt_key in checkpoint:
@@ -61,7 +66,12 @@ def get_linear_layer(weight, bias):
 
 def load_normalization_layer(path, mode='whitening'):
     """ Loads the normalization layer from a checkpoint and returns the layer. """
-    checkpoint = torch.load(path, map_location=device, weights_only=False)
+    # Try with weights_only for PyTorch 2.0+, fallback for older versions
+    try:
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
+    except TypeError:
+        # PyTorch < 2.0 doesn't support weights_only parameter
+        checkpoint = torch.load(path, map_location=device)
     if mode=='whitening':
         # if PCA whitening is used scale the feature by the dimension of the latent space
         D = checkpoint['weight'].shape[1] 

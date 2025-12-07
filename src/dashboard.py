@@ -1,9 +1,11 @@
 import streamlit as st
+import os
 from upload import Upload
 from contract import AssetAgreement, AssetMarket
 from PIL import Image
 from constants import LOCAL_ENDPOINT
 from web3 import Web3
+from utils import from_wei
 from db import get_demo_db
 from user_utils import get_user_display_options, get_user_from_display
 
@@ -60,7 +62,7 @@ class Dashboard:
             pil_img = pil_img.resize((pil_img.width//4, pil_img.height//4))
 
             st.image(pil_img, "Original Owner: %s. Price (%f ETH). Resale: %r. For Sale: %r" % (
-                user_name, Web3.from_wei(price, "ether"), resaleAllowed, forSale))
+                user_name, from_wei(price, "ether"), resaleAllowed, forSale))
 
             sale_status = st.button(
                 "Toggle Sale Status", disabled=not resaleAllowed, key=i)

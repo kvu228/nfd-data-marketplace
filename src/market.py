@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from PIL import Image
 from contract import AssetMarket, AssetAgreement, get_web3_provider
 from constants import LOCAL_ENDPOINT
@@ -6,6 +7,7 @@ from extract_watermark import WatermarkWrapper
 from tempfile import NamedTemporaryFile
 from Crypto.Hash import SHA256
 from web3 import Web3
+from utils import from_wei
 from db import get_demo_db
 from user_utils import get_user_display_options, get_user_from_display
 import time
@@ -25,10 +27,12 @@ class Market:
         timing_log = []
 
         progress_text = st.empty()
-        progress_bar = st.progress(0, text="Initializing purchase...")
+        progress_bar = st.progress(0)
+        progress_text.text("Initializing purchase...")
 
         # Step 1: Get agreement and seller info
-        progress_bar.progress(10, text="Step 1/5: Fetching agreement and seller information...")
+        progress_bar.progress(10)
+        progress_text.text("Step 1/5: Fetching agreement and seller information...")
         start_time = time.time()
         agreement = AssetAgreement(
             LOCAL_ENDPOINT, agreement_address, self.manager_address)
@@ -43,7 +47,8 @@ class Market:
         timing_log.append(f"1. Get agreement and seller info: {step1_time:.3f}s")
 
         # Step 2: Load image and compute hash
-        progress_bar.progress(30, text="Step 2/5: Loading image and computing hash...")
+        progress_bar.progress(30)
+        progress_text.text("Step 2/5: Loading image and computing hash...")
         start_time = time.time()
         wm_image = NamedTemporaryFile(
             "wb", suffix=".png", delete=False)
@@ -53,13 +58,26 @@ class Market:
 
         img_location, = res.fetchone()
 
-        with open(img_location, "rb") as f:
-            data = f.read()
-            wm_image.write(data)
-            cipher = SHA256.new(data)
-            cipher.update(bytes([seller_id, buyer_id]))
-            img_hash = cipher.digest()
-            img_hash_hex = cipher.hexdigest()
+        # Check if image file exists
+        if not os.path.exists(img_location):
+            st.error(f"❌ **Error:** Image file not found: {img_location}")
+            st.warning("The asset image file has been deleted or moved. Purchase cannot be completed.")
+            con.close()
+            return
+
+        try:
+            with open(img_location, "rb") as f:
+                data = f.read()
+                wm_image.write(data)
+                cipher = SHA256.new(data)
+                cipher.update(bytes([seller_id, buyer_id]))
+                img_hash = cipher.digest()
+                img_hash_hex = cipher.hexdigest()
+        except Exception as e:
+            st.error(f"❌ **Error loading image:** {str(e)}")
+            st.warning("Purchase cannot be completed due to image loading error.")
+            con.close()
+            return
         step2_time = time.time() - start_time
         timing_log.append(f"2. Load image and compute hash: {step2_time:.3f}s")
 
@@ -67,7 +85,8 @@ class Market:
         wm_image.close()
 
         # Step 3: Watermark the image
-        progress_bar.progress(50, text="Step 3/5: Applying watermark to the image...")
+        progress_bar.progress(50)
+        progress_text.text("Step 3/5: Applying watermark to the image...")
         start_time = time.time()
         watermark_method = st.session_state.get("watermark_method", "lsb")
         wm = WatermarkWrapper(watermark_method)
@@ -78,7 +97,8 @@ class Market:
         timing_log.append(f"3. Watermark image ({watermark_method.upper()}): {step3_time:.3f}s")
 
         # Step 4: Update hash on smart contract
-        progress_bar.progress(70, text="Step 4/5: Updating hash on smart contract...")
+        progress_bar.progress(70)
+        progress_text.text("Step 4/5: Updating hash on smart contract...")
         start_time = time.time()
         asset_market_manager = AssetMarket(
             LOCAL_ENDPOINT, self.market_address, self.manager_address)
@@ -91,11 +111,12 @@ class Market:
         update_hash_tx = asset_market_manager.w3.eth.get_transaction(update_hash_receipt.transactionHash)
         update_hash_gas_price = update_hash_tx.get('gasPrice') or update_hash_receipt.get('effectiveGasPrice', 0)
         update_hash_fee_wei = update_hash_gas * update_hash_gas_price
-        update_hash_fee_eth = Web3.from_wei(update_hash_fee_wei, 'ether')
+        update_hash_fee_eth = from_wei(update_hash_fee_wei, 'ether')
         timing_log.append(f"4. Update hash on smart contract: {step4_time:.3f}s (Gas: {update_hash_gas:,} gas, Fee: {update_hash_fee_eth:.9f} ETH)")
 
         # Step 5: Get buyer wallet and transfer asset
-        progress_bar.progress(90, text="Step 5/5: Transferring asset to buyer...")
+        progress_bar.progress(90)
+        progress_text.text("Step 5/5: Transferring asset to buyer...")
         start_time = time.time()
         res = con.execute("SELECT wallet FROM users WHERE id = ?", [buyer_id])
         buyer_wallet_address, = res.fetchone()
@@ -110,7 +131,7 @@ class Market:
         purchase_tx = asset_market.w3.eth.get_transaction(purchase_receipt.transactionHash)
         purchase_gas_price = purchase_tx.get('gasPrice') or purchase_receipt.get('effectiveGasPrice', 0)
         purchase_fee_wei = purchase_gas * purchase_gas_price
-        purchase_fee_eth = Web3.from_wei(purchase_fee_wei, 'ether')
+        purchase_fee_eth = from_wei(purchase_fee_wei, 'ether')
         timing_log.append(f"5. Transfer asset to buyer: {step5_time:.3f}s (Gas: {purchase_gas:,} gas, Fee: {purchase_fee_eth:.9f} ETH)")
 
         # Calculate total gas and total fee
@@ -118,6 +139,8 @@ class Market:
         total_fee_eth = update_hash_fee_eth + purchase_fee_eth
 
         total_time = time.time() - overall_start
+        progress_bar.progress(100)
+        progress_text.text("✅ Purchase completed!")
         timing_log.append(f"**Total time: {total_time:.3f}s**")
         timing_log.append(f"**Total gas used: {total_gas:,} gas**")
         timing_log.append(f"**Total gas fee: {total_fee_eth:.9f} ETH**")
@@ -179,6 +202,7 @@ class Market:
         data = res.fetchall()
 
         i = 0
+        missing_files = []  # Track missing files to show summary at the end
 
         for (_, owner_name, owner_wallet, owner_agreement, _, _, asset_filepath, asset_token_id) in data:
 
@@ -206,7 +230,7 @@ class Market:
             pil_img = pil_img.resize((pil_img.width//4, pil_img.height//4))
 
             c.image(pil_img, "Original Owner: %s. Seller: %s. Price (%f ETH). Resale: %r" % (
-                owner_name, seller_name, Web3.from_wei(price, "ether"), resaleAllowed))
+                owner_name, seller_name, from_wei(price, "ether"), resaleAllowed))
 
             buy = c.button("Buy", key=asset_filepath)
 
