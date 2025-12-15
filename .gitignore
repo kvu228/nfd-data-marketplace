@@ -13,8 +13,6 @@ node_modules
 /src/lsb_watermarking/output/imgs/imgs/*
 /src/ssl_watermarking/.github/
 /src/ssl_watermarking/carriers/
-/src/ssl_watermarking/input/
-/src/ssl_watermarking/output
 /src/ssl_watermarking/models
 /src/ssl_watermarking/normlayers
 /images/*
