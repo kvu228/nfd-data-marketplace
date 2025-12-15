@@ -9,7 +9,7 @@ def get_web3_provider(w3_endpoint):
 
     provider: Web3 = st.session_state["W3_PROVIDER"]
 
-    if not provider.is_connected():
+    if not provider.isConnected():
         provider = Web3(Web3.HTTPProvider(w3_endpoint))
         st.session_state["W3_PROVIDER"] = provider
 

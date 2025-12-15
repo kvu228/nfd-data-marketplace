@@ -170,6 +170,6 @@ def pil_imgs_from_folder(folder):
             if img is not None:
                 filenames.append(filename)
                 images.append(img)
-        except:
-            print("Error opening image: ", filename)
+        except Exception as e:
+            print(f"Error opening image: {filename}, error: {str(e)}")
     return images, filenames
